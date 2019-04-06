@@ -6,13 +6,13 @@ const globby = require('globby')
 const AWS = require('aws-sdk')
 const PromisePool = require('es6-promise-pool')
 
-const S3 = new AWS.S3()
+let S3 = new AWS.S3()
 
-function contentTypeFor (filename) {
+function contentTypeFor(filename) {
   return mime.lookup(filename) || 'application/octet-stream'
 }
 
-async function createBucket (options) {
+async function createBucket(options) {
   let createParams = {
     Bucket: options.bucket,
     ACL: options.acl
@@ -30,7 +30,7 @@ async function createBucket (options) {
   return true
 }
 
-async function enableStaticHosting (options) {
+async function enableStaticHosting(options) {
   let staticParams = {
     Bucket: options.bucket,
     WebsiteConfiguration: {
@@ -57,7 +57,7 @@ async function enableStaticHosting (options) {
   }
 }
 
-async function bucketExists (options) {
+async function bucketExists(options) {
   let headParams = { Bucket: options.bucket }
   let bucketExists = false
 
@@ -87,11 +87,11 @@ async function bucketExists (options) {
   return bucketExists
 }
 
-function getAllFiles (pattern, assetPath) {
+function getAllFiles(pattern, assetPath) {
   return globby.sync(pattern, { cwd: assetPath }).map(file => path.join(assetPath, file))
 }
 
-async function invalidateDistribution (options) {
+async function invalidateDistribution(options) {
   const cloudfront = new AWS.CloudFront()
   const invalidationItems = options.cloudfrontMatchers.split(',')
 
@@ -125,7 +125,7 @@ async function invalidateDistribution (options) {
   stopSpinner()
 }
 
-async function uploadFile (filename, fileBody, options) {
+async function uploadFile(filename, fileBody, options) {
   let fileKey = filename.replace(options.fullAssetPath, '').replace(/\\/g, '/')
   let pwaSupport = options.pwa && options.pwaFiles.split(',').indexOf(fileKey) > -1
   let fullFileKey = `${options.deployPath}${fileKey}`
@@ -173,6 +173,7 @@ module.exports = async (options, api) => {
   }
 
   AWS.config.update(awsConfig)
+  S3 = new AWS.S3()
 
   if (await bucketExists(options) === false) {
     error('Deployment terminated.')
@@ -210,20 +211,20 @@ module.exports = async (options, api) => {
     let fullFileKey = `${deployPath}${fileKey}`
 
     return uploadFile(fullFileKey, fileStream, options)
-    .then(() => {
-      uploadCount++
+      .then(() => {
+        uploadCount++
 
-      let pwaSupport = options.pwa && options.pwaFiles.split(',').indexOf(fileKey) > -1
-      let pwaStr = pwaSupport ? ' with cache disabled for PWA' : ''
+        let pwaSupport = options.pwa && options.pwaFiles.split(',').indexOf(fileKey) > -1
+        let pwaStr = pwaSupport ? ' with cache disabled for PWA' : ''
 
-      info(`(${uploadCount}/${uploadTotal}) Uploaded ${fullFileKey}${pwaStr}`)
-      // resolve()
-    })
-    .catch((e) => {
-      error(`Upload failed: ${fullFileKey}`)
-      error(e.toString())
-      // reject(e)
-    })
+        info(`(${uploadCount}/${uploadTotal}) Uploaded ${fullFileKey}${pwaStr}`)
+        // resolve()
+      })
+      .catch((e) => {
+        error(`Upload failed: ${fullFileKey}`)
+        error(e.toString())
+        // reject(e)
+      })
   }
 
   const uploadPool = new PromisePool(nextFile, parseInt(options.uploadConcurrency, 10))
